@@ -133,40 +133,69 @@ export function initUI(worker) {
     if (btn.action === 'eval') return evaluate();
   }
 
+  let pendingRequest = null;
+  const WORKER_TIMEOUT = 1500; // ms
+
   async function evaluate() {
     if (!expr.trim()) return;
     updateDisplay(true);
 
-    // Try worker first; if it fails (worker missing or messaging error), fall back
-    // to local evaluation so the '=' button remains responsive.
-    const payload = { id: Math.random().toString(36).slice(2), type: 'eval', expression: expr, mode: angleMode };
+    const id = Math.random().toString(36).slice(2);
+    const payload = { id, type: 'eval', expression: expr, mode: angleMode };
+
+    // Clear any previous pending request
+    if (pendingRequest && pendingRequest.timeout) {
+      clearTimeout(pendingRequest.timeout);
+    }
+
+    // Setup fallback that will run local evaluation if worker doesn't respond
+    let resolved = false;
+    const fallback = async () => {
+      if (resolved) return;
+      resolved = true;
+      try {
+        const res = await localEvaluate(expr, angleMode);
+        if (res.ok) {
+          lastResult = String(res.result);
+          resultLine.textContent = lastResult;
+        } else {
+          resultLine.textContent = `Error: ${res.error || 'invalid'}`;
+        }
+      } catch (err) {
+        resultLine.textContent = `Error: ${err.message || 'invalid'}`;
+      }
+      expr = '';
+      exprLine.textContent = '';
+      pendingRequest = null;
+    };
+
+    // Try to send to worker; if worker is unavailable, run fallback immediately
     if (worker && typeof worker.postMessage === 'function') {
       try {
         worker.postMessage(payload);
+        // store pending with timeout
+        pendingRequest = { id, timeout: setTimeout(fallback, WORKER_TIMEOUT), resolve: fallback };
         return;
       } catch (err) {
-        // continue to local evaluation
         console.warn('Worker postMessage failed, falling back to local eval', err);
       }
     }
 
-    try {
-      const res = await localEvaluate(expr, angleMode);
-      if (res.ok) {
-        lastResult = String(res.result);
-        resultLine.textContent = lastResult;
-      } else {
-        resultLine.textContent = `Error: ${res.error || 'invalid'}`;
-      }
-    } catch (err) {
-      resultLine.textContent = `Error: ${err.message || 'invalid'}`;
-    }
-    expr = '';
-    exprLine.textContent = '';
+    // No worker: run fallback immediately
+    await fallback();
   }
 
   worker.addEventListener('message', ev => {
-    const { ok, result, error } = ev.data || {};
+    const { id, ok, result, error } = ev.data || {};
+    // Ignore messages that don't match the pending request id
+    if (!pendingRequest || id !== pendingRequest.id) return;
+
+    // Resolve pending and clear timeout
+    if (pendingRequest && pendingRequest.timeout) {
+      clearTimeout(pendingRequest.timeout);
+    }
+    pendingRequest = null;
+
     if (ok) {
       lastResult = String(result);
       resultLine.textContent = lastResult;
