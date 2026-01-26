@@ -37,6 +37,8 @@ const BUTTONS = [
   { label: '=', action: 'eval', class: 'equal' }
 ];
 
+import { evaluate as localEvaluate } from './math/engine.js';
+
 export function initUI(worker) {
   const app = document.getElementById('app');
 
@@ -131,11 +133,36 @@ export function initUI(worker) {
     if (btn.action === 'eval') return evaluate();
   }
 
-  function evaluate() {
+  async function evaluate() {
     if (!expr.trim()) return;
-    const id = Math.random().toString(36).slice(2);
-    worker.postMessage({ id, type: 'eval', expression: expr, mode: angleMode });
     updateDisplay(true);
+
+    // Try worker first; if it fails (worker missing or messaging error), fall back
+    // to local evaluation so the '=' button remains responsive.
+    const payload = { id: Math.random().toString(36).slice(2), type: 'eval', expression: expr, mode: angleMode };
+    if (worker && typeof worker.postMessage === 'function') {
+      try {
+        worker.postMessage(payload);
+        return;
+      } catch (err) {
+        // continue to local evaluation
+        console.warn('Worker postMessage failed, falling back to local eval', err);
+      }
+    }
+
+    try {
+      const res = await localEvaluate(expr, angleMode);
+      if (res.ok) {
+        lastResult = String(res.result);
+        resultLine.textContent = lastResult;
+      } else {
+        resultLine.textContent = `Error: ${res.error || 'invalid'}`;
+      }
+    } catch (err) {
+      resultLine.textContent = `Error: ${err.message || 'invalid'}`;
+    }
+    expr = '';
+    exprLine.textContent = '';
   }
 
   worker.addEventListener('message', ev => {
