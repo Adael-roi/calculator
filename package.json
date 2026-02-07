@@ -8,13 +8,19 @@
     "build": "vite build",
     "preview": "vite preview --port 5000",
     "serve": "http-server dist -p 8080 -c-1",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
     "mathjs": "^15.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "playwright": "^1.58.2",
     "vite": "^7.3.1"
   }
 }

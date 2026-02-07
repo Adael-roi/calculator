@@ -16,28 +16,12 @@ export async function evaluate(expression, angleMode = 'rad') {
     let processedExpr = expression;
     
     if (angleMode === 'deg') {
-      // Wrap trig function arguments with degree-to-radian conversion
-      processedExpr = processedExpr
-        .replace(/sin\(/g, 'sin((pi/180)*')
-        .replace(/cos\(/g, 'cos((pi/180)*')
-        .replace(/tan\(/g, 'tan((pi/180)*');
-      
-      // Balance parentheses for wrapped expressions
-      const sinCount = (processedExpr.match(/sin\(/g) || []).length;
-      const cosCount = (processedExpr.match(/cos\(/g) || []).length;
-      const tanCount = (processedExpr.match(/tan\(/g) || []).length;
-      const extraClosing = sinCount + cosCount + tanCount;
-      
-      // Find each trig function and add closing paren after its argument
-      let balanced = processedExpr;
-      for (let i = 0; i < extraClosing; i++) {
-        const trigMatch = balanced.match(/(sin|cos|tan)\(\(pi\/180\)\*[^)]*\)/);
-        if (trigMatch) {
-          const idx = trigMatch.index + trigMatch[0].length;
-          balanced = balanced.slice(0, idx) + ')' + balanced.slice(idx);
-        }
-      }
-      processedExpr = balanced;
+      // Convert degrees to radians for trig functions by wrapping arguments
+      // Strategy: Find each trig function call and wrap its argument with (pi/180)*
+      processedExpr = processedExpr.replace(
+        /(sin|cos|tan)\(([^()]+|\([^()]*\))\)/g,
+        (match, func, arg) => `${func}((pi/180)*(${arg}))`
+      );
     }
     
     const result = math.evaluate(processedExpr);
